@@ -3,6 +3,7 @@ from flask_cors import CORS
 from config import Config
 from models.userModel import db
 from routes.authRoutes import auth_bp
+from routes.habitRoutes import habit_bp
 from middlewares.authMiddleware import token_required
 
 def create_app():
@@ -15,6 +16,7 @@ def create_app():
     
     # Register blueprints
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
+    app.register_blueprint(habit_bp, url_prefix='/api/habits')
     
     # Test protected route
     @app.route('/api/protected')
