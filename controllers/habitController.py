@@ -1,7 +1,6 @@
-from flask import jsonify, request
+from flask import jsonify, request, session
 from models.userModel import db, User
 from models.habitModel import Habit, HabitCheckin
-from middlewares.authMiddleware import token_required
 import datetime
 import random
 
@@ -119,9 +118,18 @@ def generate_motivational_quote(success_rate, total_habits):
     
     return random.choice(quotes_by_category[category])
 
+def get_current_user_id():
+    user_id = session.get('user_id')
+    if not user_id:
+        return None
+    return user_id
+
 # Habit Routes
-@token_required
-def create_habit(current_user):
+def create_habit():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    
     try:
         data = request.get_json()
         
@@ -144,7 +152,7 @@ def create_habit(current_user):
             return jsonify({'success': False, 'error': 'Invalid start date format'}), 400
         
         new_habit = Habit(
-            user_id=current_user.id,
+            user_id=user_id,
             name=data['name'].strip(),
             frequency=data['frequency'],
             category=data['category'],
@@ -167,10 +175,13 @@ def create_habit(current_user):
         print(f"Create habit error: {str(e)}")
         return jsonify({'success': False, 'error': 'Failed to create habit'}), 500
 
-@token_required
-def get_user_habits(current_user):
+def get_user_habits():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    
     try:
-        habits = Habit.query.filter_by(user_id=current_user.id).all()
+        habits = Habit.query.filter_by(user_id=user_id).all()
         return jsonify({
             'success': True,
             'habits': [habit.to_dict() for habit in habits]
@@ -179,11 +190,14 @@ def get_user_habits(current_user):
         print(f"Get habits error: {str(e)}")
         return jsonify({'success': False, 'error': 'Failed to fetch habits'}), 500
 
-@token_required
-def get_today_habits(current_user):
+def get_today_habits():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    
     try:
         today = datetime.datetime.now().date()
-        habits = Habit.query.filter_by(user_id=current_user.id).all()
+        habits = Habit.query.filter_by(user_id=user_id).all()
         
         today_habits = []
         for habit in habits:
@@ -218,8 +232,11 @@ def get_today_habits(current_user):
         print(f"Get today habits error: {str(e)}")
         return jsonify({'success': False, 'error': 'Failed to fetch today\'s habits'}), 500
 
-@token_required
-def mark_habit_done(current_user):
+def mark_habit_done():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    
     try:
         data = request.get_json()
         habit_id = data.get('habit_id')
@@ -227,7 +244,7 @@ def mark_habit_done(current_user):
         if not habit_id:
             return jsonify({'success': False, 'error': 'Habit ID is required'}), 400
         
-        habit = Habit.query.filter_by(id=habit_id, user_id=current_user.id).first()
+        habit = Habit.query.filter_by(id=habit_id, user_id=user_id).first()
         if not habit:
             return jsonify({'success': False, 'error': 'Habit not found'}), 404
         
@@ -262,15 +279,18 @@ def mark_habit_done(current_user):
         print(f"Mark habit done error: {str(e)}")
         return jsonify({'success': False, 'error': 'Failed to mark habit as done'}), 500
 
-@token_required
-def delete_habit(current_user):
+def delete_habit():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    
     try:
         habit_id = request.args.get('habit_id')
         
         if not habit_id:
             return jsonify({'success': False, 'error': 'Habit ID is required'}), 400
         
-        habit = Habit.query.filter_by(id=habit_id, user_id=current_user.id).first()
+        habit = Habit.query.filter_by(id=habit_id, user_id=user_id).first()
         if not habit:
             return jsonify({'success': False, 'error': 'Habit not found'}), 404
         
@@ -287,10 +307,13 @@ def delete_habit(current_user):
         print(f"Delete habit error: {str(e)}")
         return jsonify({'success': False, 'error': 'Failed to delete habit'}), 500
 
-@token_required
-def get_user_analytics(current_user):
+def get_user_analytics():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    
     try:
-        habits = Habit.query.filter_by(user_id=current_user.id).all()
+        habits = Habit.query.filter_by(user_id=user_id).all()
         habit_ids = [habit.id for habit in habits]
         
         if not habit_ids:
@@ -331,10 +354,13 @@ def get_user_analytics(current_user):
         print(f"Analytics error: {str(e)}")
         return jsonify({'success': False, 'error': 'Failed to fetch analytics'}), 500
 
-@token_required
-def get_calendar_data(current_user):
+def get_calendar_data():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    
     try:
-        habits = Habit.query.filter_by(user_id=current_user.id).all()
+        habits = Habit.query.filter_by(user_id=user_id).all()
         habit_ids = [habit.id for habit in habits]
         
         if not habit_ids:
@@ -364,10 +390,13 @@ def get_calendar_data(current_user):
         print(f"Calendar data error: {str(e)}")
         return jsonify({'success': False, 'error': 'Failed to fetch calendar data'}), 500
 
-@token_required
-def get_motivational_quote(current_user):
+def get_motivational_quote():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    
     try:
-        habits = Habit.query.filter_by(user_id=current_user.id).all()
+        habits = Habit.query.filter_by(user_id=user_id).all()
         habit_ids = [habit.id for habit in habits]
         
         seven_days_ago = datetime.datetime.now() - datetime.timedelta(days=7)

@@ -1,8 +1,6 @@
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
-import jwt
 import datetime
-from config import Config
 
 db = SQLAlchemy()
 
@@ -24,28 +22,6 @@ class User(db.Model):
     
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
-    
-    def generate_token(self):
-        payload = {
-            'exp': datetime.datetime.utcnow() + datetime.timedelta(days=7),
-            'iat': datetime.datetime.utcnow(),
-            'sub': self.id,
-            'email': self.email,
-            'name': self.name
-        }
-        return jwt.encode(payload, Config.JWT_SECRET_KEY, algorithm='HS256')
-    
-    @staticmethod
-    def verify_token(token):
-        try:
-            payload = jwt.decode(token, Config.JWT_SECRET_KEY, algorithms=['HS256'])
-            return User.query.get(payload['sub'])
-        except jwt.ExpiredSignatureError:
-            return None
-        except jwt.InvalidTokenError:
-            return None
-        except Exception:
-            return None
     
     def to_dict(self):
         return {

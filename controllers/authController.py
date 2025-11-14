@@ -1,4 +1,4 @@
-from flask import jsonify, request
+from flask import jsonify, request, session
 from models.userModel import db, User
 import re
 
@@ -36,12 +36,13 @@ def register_user():
         db.session.add(new_user)
         db.session.commit()
         
-        token = new_user.generate_token()
+        # Store user ID in session
+        session['user_id'] = new_user.id
+        session['authenticated'] = True
         
         return jsonify({
             'success': True,
             'message': 'User registered successfully',
-            'token': token,
             'user': new_user.to_dict()
         }), 201
         
@@ -64,45 +65,34 @@ def login_user():
         if not user or not user.check_password(password):
             return jsonify({'success': False, 'error': 'Invalid email or password'}), 401
         
-        token = user.generate_token()
+        # Store user ID in session
+        session['user_id'] = user.id
+        session['authenticated'] = True
         
         return jsonify({
             'success': True,
             'message': 'Login successful',
-            'token': token,
             'user': user.to_dict()
         }), 200
         
     except Exception as e:
         return jsonify({'success': False, 'error': 'Login failed. Please try again.'}), 500
 
-def verify_token():
-    try:
-        data = request.get_json()
-        token = data.get('token')
-        
-        if not token:
-            return jsonify({'success': False, 'error': 'Token is required'}), 400
-        
-        user = User.verify_token(token)
-        if user:
-            return jsonify({
-                'success': True,
-                'valid': True,
-                'user': user.to_dict()
-            }), 200
-        else:
-            return jsonify({
-                'success': False,
-                'valid': False,
-                'error': 'Invalid or expired token'
-            }), 401
-            
-    except Exception as e:
-        return jsonify({'success': False, 'error': 'Token verification failed'}), 500
+def logout_user():
+    session.clear()
+    return jsonify({'success': True, 'message': 'Logged out successfully'}), 200
 
-def get_user_profile(current_user):
+def get_current_user():
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    
+    user = User.query.get(user_id)
+    if not user:
+        session.clear()
+        return jsonify({'success': False, 'error': 'User not found'}), 404
+    
     return jsonify({
         'success': True,
-        'user': current_user.to_dict()
+        'user': user.to_dict()
     }), 200
