@@ -11,7 +11,7 @@ def create_app():
     
     # Initialize extensions
     db.init_app(app)
-    CORS(app, origins=["http://localhost:5174"])
+    CORS(app, origins=["http://localhost:5173"])
     
     # Register blueprints
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
