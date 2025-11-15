@@ -1,4 +1,4 @@
-from .userModel import db
+from . import db
 import datetime
 
 class Habit(db.Model):
@@ -21,6 +21,7 @@ class Habit(db.Model):
     def to_dict(self):
         return {
             'id': self.id,
+            'user_id': self.user_id,
             'name': self.name,
             'frequency': self.frequency,
             'category': self.category,

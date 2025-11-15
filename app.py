@@ -1,23 +1,25 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
 from config import Config
-from models.userModel import db
-from routes.authRoutes import auth_bp
-from routes.habitRoutes import habit_bp
 
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
     
     # Add session configuration
-    app.config['SECRET_KEY'] = 'your-secret-key-here'  # Change this in production
+    app.config['SECRET_KEY'] = 'habithero-secret-key-2024'
     app.config['SESSION_TYPE'] = 'filesystem'
     
-    # Initialize extensions
+    # Initialize extensions - import here to avoid circular imports
+    from models import db
     db.init_app(app)
+    
     CORS(app, origins=["http://localhost:5173"], supports_credentials=True)
     
-    # Register blueprints
+    # Register blueprints - import here to avoid circular imports
+    from routes.authRoutes import auth_bp
+    from routes.habitRoutes import habit_bp
+    
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(habit_bp, url_prefix='/api/habits')
     

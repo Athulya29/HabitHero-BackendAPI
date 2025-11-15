@@ -1,8 +1,6 @@
-from flask_sqlalchemy import SQLAlchemy
-from werkzeug.security import generate_password_hash, check_password_hash
+from . import db
 import datetime
-
-db = SQLAlchemy()
+from werkzeug.security import generate_password_hash, check_password_hash
 
 class User(db.Model):
     __tablename__ = 'users'
@@ -14,7 +12,7 @@ class User(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
     
-    # Relationship with habits
+    # Relationship with habits - use string reference to avoid circular import
     habits = db.relationship('Habit', backref='user', lazy=True, cascade='all, delete-orphan')
     
     def set_password(self, password):

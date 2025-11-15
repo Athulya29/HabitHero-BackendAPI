@@ -1,5 +1,4 @@
 from flask import jsonify, request, session
-from models.userModel import db, User
 import re
 
 def validate_email(email):
@@ -27,6 +26,9 @@ def register_user():
         if len(password) < 6:
             return jsonify({'success': False, 'error': 'Password must be at least 6 characters long'}), 400
         
+        # Import inside function to avoid circular imports
+        from models import db, User
+        
         if User.query.filter_by(email=email).first():
             return jsonify({'success': False, 'error': 'User with this email already exists'}), 409
         
@@ -47,7 +49,9 @@ def register_user():
         }), 201
         
     except Exception as e:
+        from models import db
         db.session.rollback()
+        print(f"Registration error: {str(e)}")
         return jsonify({'success': False, 'error': 'Registration failed. Please try again.'}), 500
 
 def login_user():
@@ -59,6 +63,9 @@ def login_user():
         
         email = data['email'].strip().lower()
         password = data['password']
+        
+        # Import inside function to avoid circular imports
+        from models import User
         
         user = User.query.filter_by(email=email).first()
         
@@ -76,6 +83,7 @@ def login_user():
         }), 200
         
     except Exception as e:
+        print(f"Login error: {str(e)}")
         return jsonify({'success': False, 'error': 'Login failed. Please try again.'}), 500
 
 def logout_user():
@@ -86,6 +94,9 @@ def get_current_user():
     user_id = session.get('user_id')
     if not user_id:
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    
+    # Import inside function to avoid circular imports
+    from models import User
     
     user = User.query.get(user_id)
     if not user:

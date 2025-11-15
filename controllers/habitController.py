@@ -1,12 +1,14 @@
 from flask import jsonify, request, session
-from models.userModel import db, User
-from models.habitModel import Habit, HabitCheckin
 import datetime
 import random
 
 # Helper functions
+def get_current_user_id():
+    return session.get('user_id')
+
 def calculate_streak(habit_id):
     try:
+        from models import HabitCheckin
         checkins = HabitCheckin.query.filter_by(
             habit_id=habit_id, 
             status='completed'
@@ -33,6 +35,7 @@ def calculate_streak(habit_id):
 
 def calculate_best_day(habit_ids):
     try:
+        from models import HabitCheckin
         day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
         
         checkins = HabitCheckin.query.filter(
@@ -118,12 +121,6 @@ def generate_motivational_quote(success_rate, total_habits):
     
     return random.choice(quotes_by_category[category])
 
-def get_current_user_id():
-    user_id = session.get('user_id')
-    if not user_id:
-        return None
-    return user_id
-
 # Habit Routes
 def create_habit():
     user_id = get_current_user_id()
@@ -131,6 +128,8 @@ def create_habit():
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     
     try:
+        from models import db, Habit
+        
         data = request.get_json()
         
         required_fields = ['name', 'frequency', 'category', 'start_date', 'target_duration']
@@ -171,6 +170,7 @@ def create_habit():
         }), 201
         
     except Exception as e:
+        from models import db
         db.session.rollback()
         print(f"Create habit error: {str(e)}")
         return jsonify({'success': False, 'error': 'Failed to create habit'}), 500
@@ -181,6 +181,7 @@ def get_user_habits():
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     
     try:
+        from models import Habit
         habits = Habit.query.filter_by(user_id=user_id).all()
         return jsonify({
             'success': True,
@@ -196,6 +197,7 @@ def get_today_habits():
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     
     try:
+        from models import Habit, HabitCheckin
         today = datetime.datetime.now().date()
         habits = Habit.query.filter_by(user_id=user_id).all()
         
@@ -232,12 +234,81 @@ def get_today_habits():
         print(f"Get today habits error: {str(e)}")
         return jsonify({'success': False, 'error': 'Failed to fetch today\'s habits'}), 500
 
+def get_completed_today_habits():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    
+    try:
+        from models import HabitCheckin
+        today = datetime.datetime.now().date()
+        
+        # Get habits that were completed today
+        completed_checkins = HabitCheckin.query.filter(
+            HabitCheckin.checkin_date >= datetime.datetime.combine(today, datetime.datetime.min.time()),
+            HabitCheckin.checkin_date < datetime.datetime.combine(today + datetime.timedelta(days=1), datetime.datetime.min.time()),
+            HabitCheckin.status == 'completed'
+        ).all()
+        
+        completed_habits = [checkin.habit for checkin in completed_checkins if checkin.habit.user_id == user_id]
+        
+        return jsonify({
+            'success': True,
+            'habits': [habit.to_dict() for habit in completed_habits]
+        }), 200
+        
+    except Exception as e:
+        print(f"Get completed habits error: {str(e)}")
+        return jsonify({'success': False, 'error': 'Failed to fetch completed habits'}), 500
+
+def get_failed_today_habits():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    
+    try:
+        from models import Habit, HabitCheckin
+        today = datetime.datetime.now().date()
+        habits = Habit.query.filter_by(user_id=user_id).all()
+        
+        failed_habits = []
+        for habit in habits:
+            # Check if habit should be done today
+            should_be_done = False
+            if habit.frequency == 'daily':
+                should_be_done = habit.start_date.date() <= today
+            elif habit.frequency == 'weekly':
+                should_be_done = (habit.start_date.date() <= today and 
+                                habit.start_date.weekday() == today.weekday())
+            
+            if should_be_done:
+                # Check if not completed today
+                today_checkin = HabitCheckin.query.filter_by(
+                    habit_id=habit.id,
+                    checkin_date=datetime.datetime.combine(today, datetime.datetime.min.time())
+                ).first()
+                
+                if not today_checkin or today_checkin.status != 'completed':
+                    habit_dict = habit.to_dict()
+                    habit_dict['current_streak'] = calculate_streak(habit.id)
+                    failed_habits.append(habit_dict)
+        
+        return jsonify({
+            'success': True,
+            'habits': failed_habits
+        }), 200
+        
+    except Exception as e:
+        print(f"Get failed habits error: {str(e)}")
+        return jsonify({'success': False, 'error': 'Failed to fetch failed habits'}), 500
+
 def mark_habit_done():
     user_id = get_current_user_id()
     if not user_id:
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     
     try:
+        from models import db, Habit, HabitCheckin
         data = request.get_json()
         habit_id = data.get('habit_id')
         
@@ -275,6 +346,7 @@ def mark_habit_done():
         }), 200
         
     except Exception as e:
+        from models import db
         db.session.rollback()
         print(f"Mark habit done error: {str(e)}")
         return jsonify({'success': False, 'error': 'Failed to mark habit as done'}), 500
@@ -285,6 +357,7 @@ def delete_habit():
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     
     try:
+        from models import db, Habit
         habit_id = request.args.get('habit_id')
         
         if not habit_id:
@@ -303,6 +376,7 @@ def delete_habit():
         }), 200
         
     except Exception as e:
+        from models import db
         db.session.rollback()
         print(f"Delete habit error: {str(e)}")
         return jsonify({'success': False, 'error': 'Failed to delete habit'}), 500
@@ -313,6 +387,7 @@ def get_user_analytics():
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     
     try:
+        from models import Habit, HabitCheckin
         habits = Habit.query.filter_by(user_id=user_id).all()
         habit_ids = [habit.id for habit in habits]
         
@@ -360,6 +435,7 @@ def get_calendar_data():
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     
     try:
+        from models import Habit, HabitCheckin
         habits = Habit.query.filter_by(user_id=user_id).all()
         habit_ids = [habit.id for habit in habits]
         
@@ -396,6 +472,7 @@ def get_motivational_quote():
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
     
     try:
+        from models import Habit, HabitCheckin
         habits = Habit.query.filter_by(user_id=user_id).all()
         habit_ids = [habit.id for habit in habits]
         
@@ -439,87 +516,14 @@ def get_motivational_quote():
             'author': quote['author'],
             'category': quote['category']
         }), 200
-@token_required
-def get_completed_today_habits(current_user):
-    try:
-        today = datetime.datetime.now().date()
-        
-        # Get habits that were completed today
-        completed_checkins = HabitCheckin.query.filter(
-            HabitCheckin.checkin_date >= datetime.datetime.combine(today, datetime.datetime.min.time()),
-            HabitCheckin.checkin_date < datetime.datetime.combine(today + datetime.timedelta(days=1), datetime.datetime.min.time()),
-            HabitCheckin.status == 'completed'
-        ).all()
-        
-        completed_habits = [checkin.habit for checkin in completed_checkins if checkin.habit.user_id == current_user.id]
-        
-        return jsonify({
-            'success': True,
-            'habits': [habit.to_dict() for habit in completed_habits]
-        }), 200
-        
-    except Exception as e:
-        print(f"Get completed habits error: {str(e)}")
-        return jsonify({'success': False, 'error': 'Failed to fetch completed habits'}), 500
 
-@token_required
-def get_failed_today_habits(current_user):
+def get_daily_success_data():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    
     try:
-        today = datetime.datetime.now().date()
-        habits = Habit.query.filter_by(user_id=current_user.id).all()
-        
-        failed_habits = []
-        for habit in habits:
-            # Check if habit should be done today
-            should_be_done = False
-            if habit.frequency == 'daily':
-                should_be_done = habit.start_date.date() <= today
-            elif habit.frequency == 'weekly':
-                should_be_done = (habit.start_date.date() <= today and 
-                                habit.start_date.weekday() == today.weekday())
-            
-            if should_be_done:
-                # Check if not completed today
-                today_checkin = HabitCheckin.query.filter_by(
-                    habit_id=habit.id,
-                    checkin_date=datetime.datetime.combine(today, datetime.datetime.min.time())
-                ).first()
-                
-                if not today_checkin or today_checkin.status != 'completed':
-                    habit_dict = habit.to_dict()
-                    habit_dict['current_streak'] = calculate_streak(habit.id)
-                    failed_habits.append(habit_dict)
-        
-        return jsonify({
-            'success': True,
-            'habits': failed_habits
-        }), 200
-        
-    except Exception as e:
-        print(f"Get failed habits error: {str(e)}")
-        return jsonify({'success': False, 'error': 'Failed to fetch failed habits'}), 500
-
-@token_required
-def get_habits_by_category(current_user):
-    try:
-        category = request.args.get('category')
-        if category:
-            habits = Habit.query.filter_by(user_id=current_user.id, category=category).all()
-        else:
-            habits = Habit.query.filter_by(user_id=current_user.id).all()
-        
-        return jsonify({
-            'success': True,
-            'habits': [habit.to_dict() for habit in habits]
-        }), 200
-        
-    except Exception as e:
-        print(f"Get habits by category error: {str(e)}")
-        return jsonify({'success': False, 'error': 'Failed to fetch habits'}), 500
-
-@token_required
-def get_daily_success_data(current_user):
-    try:
+        from models import Habit, HabitCheckin
         # Get last 7 days data
         end_date = datetime.datetime.now().date()
         start_date = end_date - datetime.timedelta(days=6)
@@ -529,7 +533,7 @@ def get_daily_success_data(current_user):
         
         while current_date <= end_date:
             # Get total habits that should be done on this day
-            habits = Habit.query.filter_by(user_id=current_user.id).all()
+            habits = Habit.query.filter_by(user_id=user_id).all()
             total_possible = 0
             completed = 0
             
@@ -571,3 +575,25 @@ def get_daily_success_data(current_user):
     except Exception as e:
         print(f"Get daily success data error: {str(e)}")
         return jsonify({'success': False, 'error': 'Failed to fetch daily success data'}), 500
+
+def get_habits_by_category():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+    
+    try:
+        from models import Habit
+        category = request.args.get('category')
+        if category:
+            habits = Habit.query.filter_by(user_id=user_id, category=category).all()
+        else:
+            habits = Habit.query.filter_by(user_id=user_id).all()
+        
+        return jsonify({
+            'success': True,
+            'habits': [habit.to_dict() for habit in habits]
+        }), 200
+        
+    except Exception as e:
+        print(f"Get habits by category error: {str(e)}")
+        return jsonify({'success': False, 'error': 'Failed to fetch habits'}), 500
