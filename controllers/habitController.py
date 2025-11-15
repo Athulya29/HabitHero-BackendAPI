@@ -439,3 +439,135 @@ def get_motivational_quote():
             'author': quote['author'],
             'category': quote['category']
         }), 200
+@token_required
+def get_completed_today_habits(current_user):
+    try:
+        today = datetime.datetime.now().date()
+        
+        # Get habits that were completed today
+        completed_checkins = HabitCheckin.query.filter(
+            HabitCheckin.checkin_date >= datetime.datetime.combine(today, datetime.datetime.min.time()),
+            HabitCheckin.checkin_date < datetime.datetime.combine(today + datetime.timedelta(days=1), datetime.datetime.min.time()),
+            HabitCheckin.status == 'completed'
+        ).all()
+        
+        completed_habits = [checkin.habit for checkin in completed_checkins if checkin.habit.user_id == current_user.id]
+        
+        return jsonify({
+            'success': True,
+            'habits': [habit.to_dict() for habit in completed_habits]
+        }), 200
+        
+    except Exception as e:
+        print(f"Get completed habits error: {str(e)}")
+        return jsonify({'success': False, 'error': 'Failed to fetch completed habits'}), 500
+
+@token_required
+def get_failed_today_habits(current_user):
+    try:
+        today = datetime.datetime.now().date()
+        habits = Habit.query.filter_by(user_id=current_user.id).all()
+        
+        failed_habits = []
+        for habit in habits:
+            # Check if habit should be done today
+            should_be_done = False
+            if habit.frequency == 'daily':
+                should_be_done = habit.start_date.date() <= today
+            elif habit.frequency == 'weekly':
+                should_be_done = (habit.start_date.date() <= today and 
+                                habit.start_date.weekday() == today.weekday())
+            
+            if should_be_done:
+                # Check if not completed today
+                today_checkin = HabitCheckin.query.filter_by(
+                    habit_id=habit.id,
+                    checkin_date=datetime.datetime.combine(today, datetime.datetime.min.time())
+                ).first()
+                
+                if not today_checkin or today_checkin.status != 'completed':
+                    habit_dict = habit.to_dict()
+                    habit_dict['current_streak'] = calculate_streak(habit.id)
+                    failed_habits.append(habit_dict)
+        
+        return jsonify({
+            'success': True,
+            'habits': failed_habits
+        }), 200
+        
+    except Exception as e:
+        print(f"Get failed habits error: {str(e)}")
+        return jsonify({'success': False, 'error': 'Failed to fetch failed habits'}), 500
+
+@token_required
+def get_habits_by_category(current_user):
+    try:
+        category = request.args.get('category')
+        if category:
+            habits = Habit.query.filter_by(user_id=current_user.id, category=category).all()
+        else:
+            habits = Habit.query.filter_by(user_id=current_user.id).all()
+        
+        return jsonify({
+            'success': True,
+            'habits': [habit.to_dict() for habit in habits]
+        }), 200
+        
+    except Exception as e:
+        print(f"Get habits by category error: {str(e)}")
+        return jsonify({'success': False, 'error': 'Failed to fetch habits'}), 500
+
+@token_required
+def get_daily_success_data(current_user):
+    try:
+        # Get last 7 days data
+        end_date = datetime.datetime.now().date()
+        start_date = end_date - datetime.timedelta(days=6)
+        
+        daily_data = []
+        current_date = start_date
+        
+        while current_date <= end_date:
+            # Get total habits that should be done on this day
+            habits = Habit.query.filter_by(user_id=current_user.id).all()
+            total_possible = 0
+            completed = 0
+            
+            for habit in habits:
+                if habit.frequency == 'daily':
+                    if habit.start_date.date() <= current_date:
+                        total_possible += 1
+                elif habit.frequency == 'weekly':
+                    if habit.start_date.date() <= current_date and habit.start_date.weekday() == current_date.weekday():
+                        total_possible += 1
+            
+            # Get completed checkins for this day
+            if total_possible > 0:
+                checkins = HabitCheckin.query.filter(
+                    HabitCheckin.habit_id.in_([h.id for h in habits]),
+                    HabitCheckin.checkin_date >= datetime.datetime.combine(current_date, datetime.datetime.min.time()),
+                    HabitCheckin.checkin_date < datetime.datetime.combine(current_date + datetime.timedelta(days=1), datetime.datetime.min.time()),
+                    HabitCheckin.status == 'completed'
+                ).count()
+                completed = checkins
+            
+            success_rate = (completed / total_possible * 100) if total_possible > 0 else 0
+            
+            daily_data.append({
+                'date': current_date.strftime('%Y-%m-%d'),
+                'day': current_date.strftime('%a'),
+                'success_rate': round(success_rate, 1),
+                'completed': completed,
+                'total': total_possible
+            })
+            
+            current_date += datetime.timedelta(days=1)
+        
+        return jsonify({
+            'success': True,
+            'data': daily_data
+        }), 200
+        
+    except Exception as e:
+        print(f"Get daily success data error: {str(e)}")
+        return jsonify({'success': False, 'error': 'Failed to fetch daily success data'}), 500
